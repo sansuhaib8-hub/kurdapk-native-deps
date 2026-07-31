@@ -23,8 +23,8 @@ jobs:
         run: |
           $CC -shared -fPIC -O2 \
             -o libtermux-exec-ld-preload.so \
-            src/termux-exec.c \
-            -Iinclude -ldl
+            termux-exec.c \
+            -ldl
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
