@@ -1,0 +1,33 @@
+name: Build termux-exec shim (arm64)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clone termux-exec
+        run: git clone --depth 1 https://github.com/termux/termux-exec.git
+
+      - name: Setup NDK
+        uses: nttld/setup-ndk@v1
+        id: setup-ndk
+        with:
+          ndk-version: r26d
+
+      - name: Cross-compile for arm64
+        working-directory: termux-exec
+        env:
+          CC: ${{ steps.setup-ndk.outputs.ndk-path }}/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android24-clang
+        run: |
+          $CC -shared -fPIC -O2 \
+            -o libtermux-exec-ld-preload.so \
+            src/termux-exec.c \
+            -Iinclude -ldl
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: libtermux-exec-ld-preload-arm64
+          path: termux-exec/libtermux-exec-ld-preload.so
