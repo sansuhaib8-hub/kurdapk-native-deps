@@ -16,14 +16,25 @@ jobs:
         with:
           ndk-version: r26d
 
+      - name: Show repo layout (debug)
+        working-directory: termux-exec
+        run: |
+          echo "--- top level ---"; ls -la
+          echo "--- all .c files ---"; find . -name "*.c"
+
       - name: Cross-compile for arm64
         working-directory: termux-exec
         env:
           CC: ${{ steps.setup-ndk.outputs.ndk-path }}/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android24-clang
         run: |
+          SRC=$(find . -iname "*termux-exec*.c" | head -1)
+          if [ -z "$SRC" ]; then
+            SRC=$(find . -name "*.c" | head -1)
+          fi
+          echo "Using source file: $SRC"
           $CC -shared -fPIC -O2 \
             -o libtermux-exec-ld-preload.so \
-            termux-exec.c \
+            "$SRC" \
             -ldl
 
       - name: Upload artifact
