@@ -1,0 +1,29 @@
+name: Build JVM launcher (arm64)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup NDK
+        uses: nttld/setup-ndk@v1
+        id: setup-ndk
+        with:
+          ndk-version: r26d
+
+      - name: Cross-compile launcher.c
+        env:
+          CC: ${{ steps.setup-ndk.outputs.ndk-path }}/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android24-clang
+        run: |
+          $CC -O2 -o libjvmlauncher.so jvm-launcher/launcher.c -ldl
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: libjvmlauncher-arm64
+          path: libjvmlauncher.so
