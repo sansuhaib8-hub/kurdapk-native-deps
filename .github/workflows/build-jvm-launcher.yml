@@ -28,6 +28,6 @@ jobs:
       - name: Create release and upload
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: jvm-launcher-v2
-          name: JVM Launcher v2 (fixed, no hardcoded path)
+          tag_name: jvm-launcher-v3
+          name: JVM Launcher v3 (add-exports for javac)
           files: libjvmlauncher.so
