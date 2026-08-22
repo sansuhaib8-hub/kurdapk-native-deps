@@ -3,6 +3,9 @@ name: Build JVM launcher (arm64)
 on:
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -22,8 +25,9 @@ jobs:
         run: |
           $CC -O2 -o libjvmlauncher.so jvm-launcher/launcher.c -ldl
 
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
+      - name: Create release and upload
+        uses: softprops/action-gh-release@v2
         with:
-          name: libjvmlauncher-arm64
-          path: libjvmlauncher.so
+          tag_name: jvm-launcher-v2
+          name: JVM Launcher v2 (fixed, no hardcoded path)
+          files: libjvmlauncher.so
