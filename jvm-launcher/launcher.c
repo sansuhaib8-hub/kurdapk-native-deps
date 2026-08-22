@@ -58,14 +58,15 @@ int main(int argc, char **argv) {
     snprintf(opt_libpath, sizeof(opt_libpath), "-Djava.library.path=%s", libdir);
     snprintf(opt_cp, sizeof(opt_cp), "-Djava.class.path=%s", classpath);
 
-    JavaVMOption options[3];
+    JavaVMOption options[4];
     options[0].optionString = opt_boot;
     options[1].optionString = opt_libpath;
     options[2].optionString = opt_cp;
+    options[3].optionString = "--add-exports=jdk.compiler/com.sun.tools.javac.main=ALL-UNNAMED";
 
     JavaVMInitArgs vm_args;
     vm_args.version = JNI_VERSION_1_6;
-    vm_args.nOptions = 3;
+    vm_args.nOptions = 4;
     vm_args.options = options;
     vm_args.ignoreUnrecognized = JNI_FALSE;
 
