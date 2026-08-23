@@ -80,7 +80,15 @@ int main(int argc, char **argv) {
 
     printf("JVM created successfully!\n");
 
-    jclass cls = (*env)->FindClass(env, mainclass);
+    // JNI FindClass requires slash-separated names (com/foo/Bar), but
+    // callers naturally pass dot-separated fully-qualified names
+    // (com.foo.Bar). Convert in place.
+    char mainclass_slashed[1024];
+    snprintf(mainclass_slashed, sizeof(mainclass_slashed), "%s", mainclass);
+    for (char *p = mainclass_slashed; *p; p++) {
+        if (*p == '.') *p = '/';
+    }
+    jclass cls = (*env)->FindClass(env, mainclass_slashed);
     if (cls == NULL) {
         fprintf(stderr, "Could not find class: %s\n", mainclass);
         (*env)->ExceptionDescribe(env);

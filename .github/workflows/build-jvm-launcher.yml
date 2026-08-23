@@ -28,6 +28,6 @@ jobs:
       - name: Create release and upload
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: jvm-launcher-v4
-          name: JVM Launcher v4 (android26 target, fixes heap tagging crash)
+          tag_name: jvm-launcher-v5
+          name: JVM Launcher v5 (dot-to-slash class name conversion)
           files: libjvmlauncher.so
