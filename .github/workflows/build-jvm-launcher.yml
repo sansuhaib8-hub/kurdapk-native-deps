@@ -21,13 +21,13 @@ jobs:
 
       - name: Cross-compile launcher.c
         env:
-          CC: ${{ steps.setup-ndk.outputs.ndk-path }}/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android24-clang
+          CC: ${{ steps.setup-ndk.outputs.ndk-path }}/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang
         run: |
           $CC -O2 -o libjvmlauncher.so jvm-launcher/launcher.c -ldl
 
       - name: Create release and upload
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: jvm-launcher-v3
-          name: JVM Launcher v3 (add-exports for javac)
+          tag_name: jvm-launcher-v4
+          name: JVM Launcher v4 (android26 target, fixes heap tagging crash)
           files: libjvmlauncher.so
