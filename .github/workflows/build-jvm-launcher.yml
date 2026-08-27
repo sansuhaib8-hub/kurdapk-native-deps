@@ -28,6 +28,6 @@ jobs:
       - name: Create release and upload
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: jvm-launcher-v5
-          name: JVM Launcher v5 (dot-to-slash class name conversion)
+          tag_name: jvm-launcher-v6
+          name: JVM Launcher v6 (dual-mode: legacy + standard java-style argv for Gradle compat)
           files: libjvmlauncher.so
