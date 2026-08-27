@@ -29,5 +29,5 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: jvm-launcher-v6
-          name: JVM Launcher v6 (dual-mode: legacy + standard java-style argv for Gradle compat)
+          name: JVM Launcher v6 (dual-mode argv parsing for Gradle compat)
           files: libjvmlauncher.so
