@@ -98,15 +98,12 @@ int main(int argc, char **argv) {
         /* Standard java-style invocation (e.g. from Gradle): auto-detect
          * libdir from our own binary's location, then parse argv[1:]
          * as: [JVM options] [-cp <classpath>] <MainClass> [args...] */
-        char self_path[1024];
-        ssize_t len = readlink("/proc/self/exe", self_path, sizeof(self_path) - 1);
-        if (len == -1) {
-            fprintf(stderr, "readlink /proc/self/exe failed\n");
+        const char *java_home = getenv("JAVA_HOME");
+        if (java_home == NULL) {
+            fprintf(stderr, "JAVA_HOME is not set\n");
             return 1;
         }
-        self_path[len] = '\0';
-        char *dir = dirname(self_path);
-        snprintf(libdir, sizeof(libdir), "%s", dir);
+        snprintf(libdir, sizeof(libdir), "%s/lib", java_home);
 
         int i = 1;
         while (i < argc) {

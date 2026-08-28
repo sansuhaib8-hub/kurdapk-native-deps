@@ -28,6 +28,6 @@ jobs:
       - name: Create release and upload
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: jvm-launcher-v6
-          name: JVM Launcher v6 (dual-mode argv parsing for Gradle compat)
+          tag_name: jvm-launcher-v7
+          name: JVM Launcher v7 (use JAVA_HOME env var for JDK libdir instead of binary self-path)
           files: libjvmlauncher.so
