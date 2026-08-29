@@ -176,7 +176,23 @@ int main(int argc, char **argv) {
     if (java_home_for_prop != NULL) {
         setenv("JAVA_HOME", java_home_for_prop, 1);
     }
-    setenv("LD_LIBRARY_PATH", libdir, 1);
+    /* Combine the JDK's own lib dir (libdir, needed to dlopen libjvm.so
+     * and its predeps below) with whatever LD_LIBRARY_PATH we inherited
+     * from our parent process (own_terminal_service.dart's _buildEnv
+     * sets this to "$usr/lib:$nativeLibraryDir", which is where bundled
+     * tools like git's libpcre2-8.so actually live). Overwriting it with
+     * only libdir, as before, broke any child process this JVM spawns
+     * (e.g. Gradle -> flutter -> git) that needs those bundled shared
+     * libraries: "CANNOT LINK EXECUTABLE git: library libpcre2-8.so not
+     * found". */
+    const char *inherited_ld_path = getenv("LD_LIBRARY_PATH");
+    char combined_ld_path[2048];
+    if (inherited_ld_path != NULL && inherited_ld_path[0] != '\0') {
+        snprintf(combined_ld_path, sizeof(combined_ld_path), "%s:%s", libdir, inherited_ld_path);
+    } else {
+        snprintf(combined_ld_path, sizeof(combined_ld_path), "%s", libdir);
+    }
+    setenv("LD_LIBRARY_PATH", combined_ld_path, 1);
 
     void *jvm_handle = NULL;
     if (load_predeps_and_jvm(libdir, &jvm_handle) != 0) {
