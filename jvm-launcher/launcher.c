@@ -183,12 +183,20 @@ int main(int argc, char **argv) {
              java_home_for_prop ? java_home_for_prop : libdir);
 
     /* base options + one for --add-exports + any extra_opts collected */
-    JavaVMOption options[5 + 16];
+    JavaVMOption options[6 + 16];
     int nopts = 0;
     options[nopts++].optionString = opt_boot;
     options[nopts++].optionString = opt_libpath;
     options[nopts++].optionString = opt_cp;
     options[nopts++].optionString = opt_javahome;
+    /* jspawnhelper (the native helper OpenJDK's ProcessBuilder normally
+     * execs to fork+exec a child process) is itself an ELF binary under
+     * app_flutter and therefore blocked by Android's noexec mount, same
+     * as any other file there. VFORK mode makes ProcessBuilder do the
+     * fork+exec inline instead of shelling out to jspawnhelper, which is
+     * required for anything this JVM spawns to work at all -- e.g.
+     * Gradle forking its own build daemon as a nested java process. */
+    options[nopts++].optionString = "-Djdk.lang.Process.launchMechanism=VFORK";
     options[nopts++].optionString = "--add-exports=jdk.compiler/com.sun.tools.javac.main=ALL-UNNAMED";
     for (int i = 0; i < extra_opts_count; i++) {
         options[nopts++].optionString = extra_opts[i];
