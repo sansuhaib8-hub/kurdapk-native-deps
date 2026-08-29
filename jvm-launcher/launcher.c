@@ -92,7 +92,7 @@ int main(int argc, char **argv) {
     int program_argc = 0;
 
     /* Extra JVM option strings collected from argv when in standard mode. */
-    char *extra_opts[16];
+    char *extra_opts[64];
     int extra_opts_count = 0;
 
     if (argv[1][0] == '-') {
@@ -117,7 +117,7 @@ int main(int argc, char **argv) {
                 }
             }
             if (argv[i][0] == '-') {
-                if (extra_opts_count < 16) {
+                if (extra_opts_count < 64) {
                     extra_opts[extra_opts_count++] = argv[i];
                 }
                 i++;
@@ -183,7 +183,7 @@ int main(int argc, char **argv) {
              java_home_for_prop ? java_home_for_prop : libdir);
 
     /* base options + one for --add-exports + any extra_opts collected */
-    JavaVMOption options[6 + 16];
+    JavaVMOption options[6 + 64];
     int nopts = 0;
     options[nopts++].optionString = opt_boot;
     options[nopts++].optionString = opt_libpath;
