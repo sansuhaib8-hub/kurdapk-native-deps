@@ -85,6 +85,7 @@ int main(int argc, char **argv) {
     }
 
     char libdir[1024];
+    const char *java_home_for_prop = NULL;
     const char *classpath = NULL;
     const char *mainclass = NULL;
     char **program_args = NULL;
@@ -104,6 +105,7 @@ int main(int argc, char **argv) {
             return 1;
         }
         snprintf(libdir, sizeof(libdir), "%s/lib", java_home);
+        java_home_for_prop = java_home;
 
         int i = 1;
         while (i < argc) {
@@ -173,17 +175,20 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    char opt_boot[1024], opt_libpath[1024], opt_cp[2048];
+    char opt_boot[1024], opt_libpath[1024], opt_cp[2048], opt_javahome[1024];
     snprintf(opt_boot, sizeof(opt_boot), "-Dsun.boot.library.path=%s", libdir);
     snprintf(opt_libpath, sizeof(opt_libpath), "-Djava.library.path=%s", libdir);
     snprintf(opt_cp, sizeof(opt_cp), "-Djava.class.path=%s", classpath);
+    snprintf(opt_javahome, sizeof(opt_javahome), "-Djava.home=%s",
+             java_home_for_prop ? java_home_for_prop : libdir);
 
     /* base options + one for --add-exports + any extra_opts collected */
-    JavaVMOption options[4 + 16];
+    JavaVMOption options[5 + 16];
     int nopts = 0;
     options[nopts++].optionString = opt_boot;
     options[nopts++].optionString = opt_libpath;
     options[nopts++].optionString = opt_cp;
+    options[nopts++].optionString = opt_javahome;
     options[nopts++].optionString = "--add-exports=jdk.compiler/com.sun.tools.javac.main=ALL-UNNAMED";
     for (int i = 0; i < extra_opts_count; i++) {
         options[nopts++].optionString = extra_opts[i];
