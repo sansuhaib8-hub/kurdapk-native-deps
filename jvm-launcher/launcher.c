@@ -175,20 +175,36 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    char opt_boot[1024], opt_libpath[1024], opt_cp[2048], opt_javahome[1024];
+    char opt_boot[1024], opt_libpath[1024], opt_cp[2048], opt_javahome[1024], opt_tmpdir[1024];
     snprintf(opt_boot, sizeof(opt_boot), "-Dsun.boot.library.path=%s", libdir);
     snprintf(opt_libpath, sizeof(opt_libpath), "-Djava.library.path=%s", libdir);
     snprintf(opt_cp, sizeof(opt_cp), "-Djava.class.path=%s", classpath);
     snprintf(opt_javahome, sizeof(opt_javahome), "-Djava.home=%s",
              java_home_for_prop ? java_home_for_prop : libdir);
+    /* This JDK build is originally a Termux package and some of its
+     * internal defaults (e.g. java.io.tmpdir fallback) resolve to
+     * Termux's own fixed prefix path rather than honoring our TMPDIR
+     * env var, which breaks Gradle's VirtualFileSystem init with
+     * "java.io.tmpdir is set to a directory that doesn't exist".
+     * Force it explicitly from our own TMPDIR (set in _buildEnv as
+     * usr/tmp, which bootstrap guarantees exists on every launch). */
+    const char *tmpdir_env = getenv("TMPDIR");
+    int have_tmpdir_opt = 0;
+    if (tmpdir_env != NULL && tmpdir_env[0] != '\0') {
+        snprintf(opt_tmpdir, sizeof(opt_tmpdir), "-Djava.io.tmpdir=%s", tmpdir_env);
+        have_tmpdir_opt = 1;
+    }
 
     /* base options + one for --add-exports + any extra_opts collected */
-    JavaVMOption options[6 + 64];
+    JavaVMOption options[7 + 64];
     int nopts = 0;
     options[nopts++].optionString = opt_boot;
     options[nopts++].optionString = opt_libpath;
     options[nopts++].optionString = opt_cp;
     options[nopts++].optionString = opt_javahome;
+    if (have_tmpdir_opt) {
+        options[nopts++].optionString = opt_tmpdir;
+    }
     /* jspawnhelper (the native helper OpenJDK's ProcessBuilder normally
      * execs to fork+exec a child process) is itself an ELF binary under
      * app_flutter and therefore blocked by Android's noexec mount, same
