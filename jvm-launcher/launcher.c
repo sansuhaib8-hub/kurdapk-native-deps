@@ -149,6 +149,20 @@ int main(int argc, char **argv) {
         program_argc = argc - 4;
     }
 
+    /* Capture the caller's original working directory before we chdir
+     * into libdir below (needed so dlopen of predeps/libjvm.so below
+     * resolves reliably). We chdir back to it right before starting the
+     * JVM, because the JVM's "user.dir" system property (and anything
+     * that derives a project root from getcwd(), e.g. Gradle's build
+     * layout scanner) is initialized from the process's cwd at JVM
+     * startup -- leaving cwd at libdir makes Gradle look for a build
+     * in $JAVA_HOME/lib instead of the directory the user actually
+     * invoked gradlew from. */
+    char orig_cwd[1024];
+    if (getcwd(orig_cwd, sizeof(orig_cwd)) == NULL) {
+        orig_cwd[0] = '\0';
+    }
+
     chdir(libdir);
     /* IMPORTANT: do not export JAVA_HOME=libdir. libdir is already
      * java_home + "/lib" (standard mode) or the raw jni_libs_dir
@@ -167,6 +181,16 @@ int main(int argc, char **argv) {
     void *jvm_handle = NULL;
     if (load_predeps_and_jvm(libdir, &jvm_handle) != 0) {
         return 1;
+    }
+
+    /* Restore the caller's original directory now that libjvm.so and its
+     * predeps are loaded (dlopen already resolved them via absolute
+     * paths, so cwd no longer matters for that). This makes the JVM's
+     * user.dir property -- and anything that derives a project root
+     * from getcwd(), like Gradle's build layout scanner -- match the
+     * directory the user actually invoked us from, instead of libdir. */
+    if (orig_cwd[0] != '\0') {
+        chdir(orig_cwd);
     }
 
     CreateJavaVM_t JNI_CreateJavaVM_p = (CreateJavaVM_t)dlsym(jvm_handle, "JNI_CreateJavaVM");
