@@ -78,10 +78,13 @@ int main(int argc, char *argv[], char *envp[]) {
 
     // Preserve original argv as-is (argv[0] stays the invoked symlink
     // path so any target that inspects its own name still sees the
-    // expected value).
-    fexecve((int)memfd, argv, envp);
+    // expected value). Bionic (Android's libc) has no fexecve() wrapper,
+    // so call the underlying execveat() syscall directly with an empty
+    // path and AT_EMPTY_PATH, which is exactly what fexecve() does on
+    // glibc under the hood.
+    syscall(SYS_execveat, (int)memfd, "", argv, envp, AT_EMPTY_PATH);
 
-    fprintf(stderr, "genericloader: fexecve failed: %s\n", strerror(errno));
+    fprintf(stderr, "genericloader: execveat failed: %s\n", strerror(errno));
     close((int)memfd);
     return 127;
 }
