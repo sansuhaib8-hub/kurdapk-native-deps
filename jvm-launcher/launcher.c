@@ -148,7 +148,18 @@ int main(int argc, char **argv) {
     }
 
     chdir(libdir);
-    setenv("JAVA_HOME", libdir, 1);
+    /* IMPORTANT: do not export JAVA_HOME=libdir. libdir is already
+     * java_home + "/lib" (standard mode) or the raw jni_libs_dir
+     * (legacy mode). If we export libdir as JAVA_HOME, any child
+     * process that re-derives its own libdir as "$JAVA_HOME/lib"
+     * (e.g. Gradle spawning a nested daemon via this same launcher)
+     * ends up with a doubled ".../lib/lib" path and fails to find
+     * predeps like libandroid-shmem.so. Child processes should see
+     * the original, un-suffixed JAVA_HOME so they compute libdir
+     * the same way we did. */
+    if (java_home_for_prop != NULL) {
+        setenv("JAVA_HOME", java_home_for_prop, 1);
+    }
     setenv("LD_LIBRARY_PATH", libdir, 1);
 
     void *jvm_handle = NULL;
