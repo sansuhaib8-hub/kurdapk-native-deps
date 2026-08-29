@@ -1,0 +1,30 @@
+name: Build generic loader (arm64)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup NDK
+        uses: nttld/setup-ndk@v1
+        id: setup-ndk
+        with:
+          ndk-version: r26d
+      - name: Cross-compile genericloader.c
+        env:
+          CC: ${{ steps.setup-ndk.outputs.ndk-path }}/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang
+        run: |
+          $CC -O2 -o libgenericloader.so generic-loader/genericloader.c
+      - name: Create release and upload
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: generic-loader-v1
+          name: Generic Loader v1 (memfd_create + fexecve, bypasses noexec for any file type)
+          files: libgenericloader.so
