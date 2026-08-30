@@ -1,27 +1,13 @@
-// glibcwrapper.c
+// glibcwrapper.c (v2)
 //
 // Wraps a glibc-linked ELF binary bundled as a jniLibs .so, executing it
 // via glibc's own dynamic loader (bundled alongside as another .so),
-// bypassing the kernel's PT_INTERP resolution entirely (which fails
-// because /lib/ld-linux-aarch64.so.1 doesn't exist on Android).
+// bypassing the kernel's PT_INTERP resolution entirely.
 //
-// This binary is placed in jniLibs as "libimpellerc.so" (or similar).
-// The original glibc binary is renamed to "<name>.so.real" alongside it.
-// The glibc dynamic loader itself is bundled as "libglibc_ld.so", and all
-// DT_NEEDED entries in both the target binary and its glibc deps are
-// patched (via patchelf) to bare filenames (e.g. "libglibc_c.so") so the
-// loader resolves them via LD_LIBRARY_PATH, set below to our own dir --
-// making this immune to nativeLibraryDir's hash changing on every
-// reinstall (no absolute paths baked in anywhere).
-//
-// At runtime:
-//   1. Resolve our own real path via /proc/self/exe -> gives the jniLibs
-//      dir (nativeLibraryDir), which also contains libglibc_ld.so and
-//      the glibc dependency .so files.
-//   2. Set LD_LIBRARY_PATH to that dir so the glibc loader can find its
-//      needed libraries by bare name.
-//   3. execv() the glibc loader itself, passing "<argv[0]>.real" as the
-//      program to load, forwarding the rest of argv.
+// v2 fixes: unset LD_PRELOAD (Android/Termux env may set a preload lib
+// requiring glibc symbols this runtime doesn't have) and pass library
+// search path via the loader's --library-path flag (not just the
+// LD_LIBRARY_PATH env var) for reliability.
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -62,19 +48,24 @@ int main(int argc, char *argv[]) {
         return 127;
     }
 
+    unsetenv("LD_PRELOAD");
+
     char ld_path_env[PATH_MAX + 32];
     snprintf(ld_path_env, sizeof(ld_path_env), "LD_LIBRARY_PATH=%s", libdir);
     putenv(ld_path_env);
 
-    char **new_argv = malloc(sizeof(char *) * (size_t)(argc + 2));
+    // argv: [loader, "--library-path", libdir, real_target, orig_argv[1..]]
+    char **new_argv = malloc(sizeof(char *) * (size_t)(argc + 4));
     if (new_argv == NULL) {
         fprintf(stderr, "glibcwrapper: out of memory\n");
         return 127;
     }
     new_argv[0] = loader;
-    new_argv[1] = real_target;
-    for (int i = 1; i < argc; i++) new_argv[i + 1] = argv[i];
-    new_argv[argc + 1] = NULL;
+    new_argv[1] = "--library-path";
+    new_argv[2] = libdir;
+    new_argv[3] = real_target;
+    for (int i = 1; i < argc; i++) new_argv[i + 3] = argv[i];
+    new_argv[argc + 3] = NULL;
 
     execv(loader, new_argv);
     fprintf(stderr, "glibcwrapper: execv(%s) failed: %s\n", loader, strerror(errno));
