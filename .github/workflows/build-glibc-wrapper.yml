@@ -1,0 +1,30 @@
+name: Build glibc wrapper (arm64)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup NDK
+        uses: nttld/setup-ndk@v1
+        id: setup-ndk
+        with:
+          ndk-version: r26d
+      - name: Cross-compile glibcwrapper.c
+        env:
+          CC: ${{ steps.setup-ndk.outputs.ndk-path }}/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang
+        run: |
+          $CC -O2 -o libglibcwrapper.so exec-wrapper/glibcwrapper.c
+      - name: Create release and upload
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: glibc-wrapper-v1
+          name: Glibc Wrapper v1 (execs bundled glibc ELF binaries via bundled glibc loader)
+          files: libglibcwrapper.so
