@@ -5,6 +5,17 @@
 #include <limits.h>
 #include <libgen.h>
 #include <errno.h>
+#include <sys/wait.h>
+#include <time.h>
+
+static void write_debug_log(const char *msg) {
+    FILE *f = fopen("/sdcard/impellerc_crash_debug.txt", "a");
+    if (f) {
+        time_t t = time(NULL);
+        fprintf(f, "[%ld] %s\n", (long)t, msg);
+        fclose(f);
+    }
+}
 
 int main(int argc, char *argv[]) {
     char self_path[PATH_MAX];
@@ -22,8 +33,6 @@ int main(int argc, char *argv[]) {
     base_buf[sizeof(base_buf) - 1] = '\0';
     char *base = basename(base_buf);
 
-    // Strip trailing ".so" and append "__real.so" (AGP drops jniLibs
-    // files not ending in exactly ".so", so we can't just append ".real")
     char base_noext[PATH_MAX];
     strncpy(base_noext, base, sizeof(base_noext) - 1);
     base_noext[sizeof(base_noext) - 1] = '\0';
@@ -56,8 +65,42 @@ int main(int argc, char *argv[]) {
     for (int i = 1; i < argc; i++) new_argv[i + 3] = argv[i];
     new_argv[argc + 3] = NULL;
 
-    execv(loader, new_argv);
-    fprintf(stderr, "glibcwrapper: execv(%s) failed: %s\n", loader, strerror(errno));
-    free(new_argv);
-    return 127;
+    char logmsg[512];
+    snprintf(logmsg, sizeof(logmsg), "About to fork+exec: loader=%s target=%s libdir=%s", loader, real_target, libdir);
+    write_debug_log(logmsg);
+
+    pid_t pid = fork();
+    if (pid == -1) {
+        write_debug_log("fork() failed");
+        fprintf(stderr, "glibcwrapper: fork failed: %s\n", strerror(errno));
+        free(new_argv);
+        return 127;
+    }
+
+    if (pid == 0) {
+        execv(loader, new_argv);
+        write_debug_log("execv failed in child");
+        fprintf(stderr, "glibcwrapper: execv(%s) failed: %s\n", loader, strerror(errno));
+        _exit(127);
+    }
+
+    int status;
+    waitpid(pid, &status, 0);
+    if (WIFEXITED(status)) {
+        snprintf(logmsg, sizeof(logmsg), "Child exited normally, code=%d", WEXITSTATUS(status));
+        write_debug_log(logmsg);
+        free(new_argv);
+        return WEXITSTATUS(status);
+    } else if (WIFSIGNALED(status)) {
+        int sig = WTERMSIG(status);
+        snprintf(logmsg, sizeof(logmsg), "Child KILLED by signal %d (%s)%s", sig, strsignal(sig),
+                 WCOREDUMP(status) ? " [core dumped]" : " [no core]");
+        write_debug_log(logmsg);
+        free(new_argv);
+        return 128 + sig;
+    } else {
+        write_debug_log("Child died with unknown status");
+        free(new_argv);
+        return 127;
+    }
 }
