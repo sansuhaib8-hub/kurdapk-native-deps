@@ -51,10 +51,10 @@ int main(int argc, char *argv[]) {
     snprintf(ld_path_env, sizeof(ld_path_env), "LD_LIBRARY_PATH=%s", libdir);
     putenv(ld_path_env);
 
-    // Enable glibc dynamic linker debug tracing
-    setenv("LD_DEBUG", "all", 1);
-    setenv("LD_DEBUG_OUTPUT", "/data/data/com.kurd.apkapp.kurdapk/app_flutter/ld_debug_trace", 1);
-    write_debug_log("STEP_LDDEBUG: LD_DEBUG env set");
+    // Force generic (non-IFUNC-optimized) code paths — mask all HWCAP bits
+    setenv("LD_HWCAP_MASK", "0", 1);
+    setenv("GLIBC_TUNABLES", "glibc.cpu.hwcaps=-ALL", 1);
+    write_debug_log("STEP_HWCAP: HWCAP masking env set");
 
     char **new_argv = malloc(sizeof(char *) * (size_t)(argc + 4));
     if (new_argv == NULL) { return 127; }
