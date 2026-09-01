@@ -94,6 +94,18 @@ int main(int argc, char **argv) {
     /* Extra JVM option strings collected from argv when in standard mode. */
     char *extra_opts[64];
     int extra_opts_count = 0;
+    /* Buffers to hold combined "flag=value" strings for two-token JVM
+     * options (Gradle/Kotlin daemon pass these as two separate argv
+     * entries, e.g. "--add-opens" "java.base/sun.nio.ch=ALL-UNNAMED",
+     * unlike single-token options like "-Xmx256m"). Without combining
+     * them, the value token (which doesn't start with '-') gets
+     * misread as the main class. */
+    static char two_token_bufs[64][1024];
+    int two_token_buf_idx = 0;
+    const char *two_token_flags[] = {
+        "--add-opens", "--add-exports", "--add-modules",
+        "--patch-module", "--add-reads", NULL
+    };
 
     if (argv[1][0] == '-') {
         /* Standard java-style invocation (e.g. from Gradle): auto-detect
@@ -117,6 +129,22 @@ int main(int argc, char **argv) {
                 }
             }
             if (argv[i][0] == '-') {
+                int is_two_token = 0;
+                for (int f = 0; two_token_flags[f] != NULL; f++) {
+                    if (strcmp(argv[i], two_token_flags[f]) == 0) {
+                        is_two_token = 1;
+                        break;
+                    }
+                }
+                if (is_two_token && i + 1 < argc && two_token_buf_idx < 64
+                    && extra_opts_count < 64) {
+                    snprintf(two_token_bufs[two_token_buf_idx], sizeof(two_token_bufs[0]),
+                             "%s=%s", argv[i], argv[i + 1]);
+                    extra_opts[extra_opts_count++] = two_token_bufs[two_token_buf_idx];
+                    two_token_buf_idx++;
+                    i += 2;
+                    continue;
+                }
                 if (extra_opts_count < 64) {
                     extra_opts[extra_opts_count++] = argv[i];
                 }
