@@ -7,6 +7,7 @@
 #include <sys/prctl.h>
 #include <malloc.h>
 #include <libgen.h>
+#include "kurdapk_javac_class.h"
 
 typedef jint (JNICALL *CreateJavaVM_t)(JavaVM **, void **, void *);
 
@@ -35,6 +36,39 @@ static int load_predeps_and_jvm(const char *libdir, void **out_jvm_handle) {
         return 1;
     }
     *out_jvm_handle = jvm_handle;
+    return 0;
+}
+
+static int run_kurdapk_javac(JNIEnv *env, JavaVM *jvm, int argc_extra, char **argv_extra) {
+    jclass cls = (*env)->DefineClass(env, "KurdApkJavac", NULL,
+                                      (const jbyte *)KurdApkJavac_class,
+                                      (jsize)KurdApkJavac_class_len);
+    if (cls == NULL) {
+        fprintf(stderr, "Could not define KurdApkJavac class\n");
+        (*env)->ExceptionDescribe(env);
+        (*jvm)->DestroyJavaVM(jvm);
+        return 1;
+    }
+
+    jmethodID mid = (*env)->GetStaticMethodID(env, cls, "main", "([Ljava/lang/String;)V");
+    if (mid == NULL) {
+        fprintf(stderr, "Could not find KurdApkJavac.main\n");
+        (*env)->ExceptionDescribe(env);
+        (*jvm)->DestroyJavaVM(jvm);
+        return 1;
+    }
+
+    jclass stringClass = (*env)->FindClass(env, "java/lang/String");
+    jobjectArray mainArgs = (*env)->NewObjectArray(env, argc_extra > 0 ? argc_extra : 0, stringClass, NULL);
+    for (int i = 0; i < argc_extra; i++) {
+        (*env)->SetObjectArrayElement(env, mainArgs, i, (*env)->NewStringUTF(env, argv_extra[i]));
+    }
+
+    (*env)->CallStaticVoidMethod(env, cls, mid, mainArgs);
+    if ((*env)->ExceptionCheck(env)) {
+        (*env)->ExceptionDescribe(env);
+    }
+    (*jvm)->DestroyJavaVM(jvm);
     return 0;
 }
 
@@ -84,6 +118,25 @@ int main(int argc, char **argv) {
         return 1;
     }
 
+    /* javac mode: if invoked as (a symlink named) "javac", skip all of
+     * the generic java-style argv parsing below entirely -- real javac
+     * command-line syntax (--patch-module=, -d <dir>, source files,
+     * etc.) is NOT java's "[opts] MainClass [args]" shape, and trying
+     * to parse it that way misreads directory/file arguments as a main
+     * class name. Instead, boot the JVM with just enough to dlopen it,
+     * then hand ALL of argv[1:] verbatim to KurdApkJavac.main(), which
+     * forwards them to javax.tools.JavaCompiler.run() -- the same API
+     * real javac uses internally. */
+    char argv0_base[256];
+    {
+        char argv0_copy[1024];
+        strncpy(argv0_copy, argv[0], sizeof(argv0_copy) - 1);
+        argv0_copy[sizeof(argv0_copy) - 1] = '\0';
+        strncpy(argv0_base, basename(argv0_copy), sizeof(argv0_base) - 1);
+        argv0_base[sizeof(argv0_base) - 1] = '\0';
+    }
+    int is_javac_mode = (strcmp(argv0_base, "javac") == 0);
+
     char libdir[1024];
     const char *java_home_for_prop = NULL;
     const char *classpath = NULL;
@@ -107,7 +160,18 @@ int main(int argc, char **argv) {
         "--patch-module", "--add-reads", NULL
     };
 
-    if (argv[1][0] == '-') {
+    if (is_javac_mode) {
+        const char *java_home = getenv("JAVA_HOME");
+        if (java_home == NULL) {
+            fprintf(stderr, "JAVA_HOME is not set\n");
+            return 1;
+        }
+        snprintf(libdir, sizeof(libdir), "%s/lib", java_home);
+        java_home_for_prop = java_home;
+        classpath = ".";
+        program_args = &argv[1];
+        program_argc = argc - 1;
+    } else if (argv[1][0] == '-') {
         /* Standard java-style invocation (e.g. from Gradle): auto-detect
          * libdir from our own binary's location, then parse argv[1:]
          * as: [JVM options] [-cp <classpath>] <MainClass> [args...] */
@@ -301,5 +365,8 @@ int main(int argc, char **argv) {
     }
 
     printf("JVM created successfully!\n");
+    if (is_javac_mode) {
+        return run_kurdapk_javac(env, jvm, program_argc, program_args);
+    }
     return run_main(env, jvm, mainclass, program_argc, program_args);
 }
