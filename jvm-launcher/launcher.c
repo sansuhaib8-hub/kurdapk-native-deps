@@ -40,7 +40,20 @@ static int load_predeps_and_jvm(const char *libdir, void **out_jvm_handle) {
 }
 
 static int run_kurdapk_javac(JNIEnv *env, JavaVM *jvm, int argc_extra, char **argv_extra) {
-    jclass cls = (*env)->DefineClass(env, "KurdApkJavac", NULL,
+    /* DefineClass with a NULL loader puts the class in the bootstrap
+     * classloader's unnamed module, which by default can only read
+     * java.base -- NOT the java.compiler/jdk.compiler modules we need,
+     * even if --add-modules resolved them into the boot layer. Using
+     * the SYSTEM classloader instead gives KurdApkJavac the same
+     * default readability as ordinary classpath code (like a plain
+     * "java -cp ... MainClass" invocation gets), which can read every
+     * module resolved into the boot layer. */
+    jclass classLoaderCls = (*env)->FindClass(env, "java/lang/ClassLoader");
+    jmethodID getSystemClassLoaderMid = (*env)->GetStaticMethodID(
+        env, classLoaderCls, "getSystemClassLoader", "()Ljava/lang/ClassLoader;");
+    jobject systemLoader = (*env)->CallStaticObjectMethod(env, classLoaderCls, getSystemClassLoaderMid);
+
+    jclass cls = (*env)->DefineClass(env, "KurdApkJavac", systemLoader,
                                       (const jbyte *)KurdApkJavac_class,
                                       (jsize)KurdApkJavac_class_len);
     if (cls == NULL) {
