@@ -346,6 +346,14 @@ int main(int argc, char **argv) {
      * Gradle forking its own build daemon as a nested java process. */
     options[nopts++].optionString = "-Djdk.lang.Process.launchMechanism=VFORK";
     options[nopts++].optionString = "--add-exports=jdk.compiler/com.sun.tools.javac.main=ALL-UNNAMED";
+    if (is_javac_mode) {
+        /* Force the compiler modules into the default root module set --
+         * they can be present in the jlink image (observable) without
+         * being auto-resolved for classpath/unnamed-module execution,
+         * which is what KurdApkJavac.main() runs as when invoked via
+         * this launcher. */
+        options[nopts++].optionString = "--add-modules=java.compiler,jdk.compiler";
+    }
     for (int i = 0; i < extra_opts_count; i++) {
         options[nopts++].optionString = extra_opts[i];
     }
