@@ -1,5 +1,5 @@
 // Wrapper for NDK's clang: injects the flags bin_clang-21.so needs
-// (resource-dir, -B, -L for lld/libunwind) and sets LD_LIBRARY_PATH,
+// (resource-dir, -B, -L for lld/libunwind, and per-API crt dir),
 // then execve's the real bionic clang. Placed in jniLibs so it's
 // exec-permitted; NDK's own toolchains/.../bin/clang is replaced
 // with a symlink pointing at this wrapper.
@@ -12,6 +12,14 @@
 #include <limits.h>
 
 extern char **environ;
+
+static const char *multiarch_for(const char *arch) {
+    if (strcmp(arch, "aarch64") == 0) return "aarch64-linux-android";
+    if (strncmp(arch, "arm", 3) == 0) return "arm-linux-androideabi";
+    if (strcmp(arch, "i686") == 0) return "i686-linux-android";
+    if (strcmp(arch, "x86_64") == 0) return "x86_64-linux-android";
+    return NULL;
+}
 
 int main(int argc, char *argv[]) {
     char exe_path[PATH_MAX];
@@ -40,15 +48,48 @@ int main(int argc, char *argv[]) {
     char l_flag[PATH_MAX];
     snprintf(l_flag, sizeof(l_flag), "-L%s/lib", data_dir);
 
+    /* Scan argv for --sysroot= and --target= to compute the versioned
+       crt directory (e.g. <sysroot>/usr/lib/aarch64-linux-android/21)
+       that bin_clang-21.so can't auto-detect on its own. */
+    const char *sysroot_arg = NULL;
+    const char *target_arg = NULL;
+    for (int j = 1; j < argc; j++) {
+        if (strncmp(argv[j], "--sysroot=", 10) == 0) sysroot_arg = argv[j] + 10;
+        else if (strncmp(argv[j], "--target=", 9) == 0) target_arg = argv[j] + 9;
+    }
+
+    char crt_b_flag[PATH_MAX] = {0};
+    if (sysroot_arg && target_arg) {
+        char arch[32] = {0};
+        const char *dash = strchr(target_arg, '-');
+        size_t arch_len = dash ? (size_t)(dash - target_arg) : strlen(target_arg);
+        if (arch_len >= sizeof(arch)) arch_len = sizeof(arch) - 1;
+        memcpy(arch, target_arg, arch_len);
+        arch[arch_len] = '\0';
+
+        int tlen = (int)strlen(target_arg);
+        int k = tlen;
+        while (k > 0 && target_arg[k-1] >= '0' && target_arg[k-1] <= '9') k--;
+        const char *api = (k < tlen) ? target_arg + k : "21";
+
+        const char *multiarch = multiarch_for(arch);
+        if (multiarch) {
+            snprintf(crt_b_flag, sizeof(crt_b_flag), "-B%s/usr/lib/%s/%s",
+                     sysroot_arg, multiarch, api);
+        }
+    }
+
     setenv("LD_LIBRARY_PATH", exec_dir, 1);
 
-    int new_argc = argc + 3;
+    int have_crt_flag = crt_b_flag[0] != '\0';
+    int new_argc = argc + 3 + (have_crt_flag ? 1 : 0);
     char **new_argv = malloc((new_argc + 1) * sizeof(char *));
     int i = 0;
     new_argv[i++] = target;
     new_argv[i++] = resource_dir_flag;
     new_argv[i++] = b_flag;
     new_argv[i++] = l_flag;
+    if (have_crt_flag) new_argv[i++] = crt_b_flag;
     for (int j = 1; j < argc; j++) new_argv[i++] = argv[j];
     new_argv[i] = NULL;
 
