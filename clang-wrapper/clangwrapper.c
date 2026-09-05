@@ -3,6 +3,14 @@
 // then execve's the real bionic clang. Placed in jniLibs so it's
 // exec-permitted; NDK's own toolchains/.../bin/clang is replaced
 // with a symlink pointing at this wrapper.
+//
+// Note: cmake's Android toolchain file can fail to detect the host
+// OS tag when running on-device (uname reports Android/aarch64, not
+// linux-x86_64), producing a --sysroot= value like
+// ".../prebuilt//sysroot" (missing the "linux-x86_64" host segment).
+// The actual crtbegin/crtend objects only exist under
+// ".../prebuilt/linux-x86_64/sysroot/...", so we probe for that and
+// fall back to inserting "linux-x86_64" if the naive path is missing.
 #define _GNU_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
@@ -19,6 +27,22 @@ static const char *multiarch_for(const char *arch) {
     if (strcmp(arch, "i686") == 0) return "i686-linux-android";
     if (strcmp(arch, "x86_64") == 0) return "x86_64-linux-android";
     return NULL;
+}
+
+/* Strip a trailing "/sysroot" (with any trailing slashes before it)
+   from sysroot_arg, writing the toolchain root into out. */
+static void toolchain_root_from_sysroot(const char *sysroot_arg, char *out, size_t out_sz) {
+    size_t len = strlen(sysroot_arg);
+    while (len > 0 && sysroot_arg[len - 1] == '/') len--;
+    const char *suffix = "/sysroot";
+    size_t suffix_len = strlen(suffix);
+    if (len >= suffix_len && strncmp(sysroot_arg + len - suffix_len, suffix, suffix_len) == 0) {
+        len -= suffix_len;
+    }
+    while (len > 0 && sysroot_arg[len - 1] == '/') len--;
+    if (len >= out_sz) len = out_sz - 1;
+    memcpy(out, sysroot_arg, len);
+    out[len] = '\0';
 }
 
 int main(int argc, char *argv[]) {
@@ -74,8 +98,34 @@ int main(int argc, char *argv[]) {
 
         const char *multiarch = multiarch_for(arch);
         if (multiarch) {
-            snprintf(crt_b_flag, sizeof(crt_b_flag), "-B%s/usr/lib/%s/%s",
-                     sysroot_arg, multiarch, api);
+            /* Candidate 1: sysroot_arg as given by cmake, unmodified. */
+            char candidate1[PATH_MAX];
+            snprintf(candidate1, sizeof(candidate1), "%s/usr/lib/%s/%s", sysroot_arg, multiarch, api);
+            char probe1[PATH_MAX];
+            snprintf(probe1, sizeof(probe1), "%s/crtbegin_dynamic.o", candidate1);
+
+            if (access(probe1, F_OK) == 0) {
+                snprintf(crt_b_flag, sizeof(crt_b_flag), "-B%s", candidate1);
+            } else {
+                /* Candidate 2: insert linux-x86_64 host segment before
+                   the trailing "sysroot" component (handles the
+                   on-device host-tag-detection-failure case). */
+                char toolchain_root[PATH_MAX];
+                toolchain_root_from_sysroot(sysroot_arg, toolchain_root, sizeof(toolchain_root));
+                char candidate2[PATH_MAX];
+                snprintf(candidate2, sizeof(candidate2), "%s/linux-x86_64/sysroot/usr/lib/%s/%s",
+                         toolchain_root, multiarch, api);
+                char probe2[PATH_MAX];
+                snprintf(probe2, sizeof(probe2), "%s/crtbegin_dynamic.o", candidate2);
+
+                if (access(probe2, F_OK) == 0) {
+                    snprintf(crt_b_flag, sizeof(crt_b_flag), "-B%s", candidate2);
+                } else {
+                    /* Neither candidate exists; fall back to candidate1
+                       so clang's own error message stays informative. */
+                    snprintf(crt_b_flag, sizeof(crt_b_flag), "-B%s", candidate1);
+                }
+            }
         }
     }
 
@@ -92,6 +142,11 @@ int main(int argc, char *argv[]) {
     if (have_crt_flag) new_argv[i++] = crt_b_flag;
     for (int j = 1; j < argc; j++) new_argv[i++] = argv[j];
     new_argv[i] = NULL;
+
+    if (getenv("KURDAPK_WRAPPER_DEBUG")) {
+        fprintf(stderr, "[wrapper] argc=%d\n", new_argc);
+        for (int d = 0; d < new_argc; d++) fprintf(stderr, "[wrapper]   argv[%d]=%s\n", d, new_argv[d]);
+    }
 
     execve(target, new_argv, environ);
     perror("clangwrapper: execve failed");
