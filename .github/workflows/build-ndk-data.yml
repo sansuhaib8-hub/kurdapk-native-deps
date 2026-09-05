@@ -1,0 +1,64 @@
+name: Build NDK data (aarch64-only sysroot + cmake toolchain files)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download official NDK r28c
+        run: |
+          curl -fSL -o ndk.zip https://dl.google.com/android/repository/android-ndk-r28c-linux.zip
+          unzip -q ndk.zip
+          mv android-ndk-r28c ndk-src
+          cat ndk-src/source.properties
+
+      - name: Assemble trimmed ndk-data tree
+        run: |
+          set -e
+          NDK=ndk-src
+          OUT=ndk-data/usr/lib/android-sdk/ndk/28.2.13676358
+
+          mkdir -p "$OUT"
+          cp "$NDK/source.properties" "$OUT/"
+          cp -r "$NDK/meta" "$OUT/meta"
+          mkdir -p "$OUT/build"
+          cp -r "$NDK/build/cmake" "$OUT/build/cmake"
+
+          # Only the parts of the aarch64 sysroot we actually need for
+          # compiling/linking: headers (arch-independent, shared across
+          # ABIs) and the aarch64-linux-android lib dir (crt objects +
+          # linker stub .so/.a files, per-API-level). We deliberately
+          # drop arm/i686/x86_64 sysroot libs and all of the NDK's own
+          # host (linux-x86_64) clang/lld binaries -- KurdApk supplies
+          # its own on-device bionic clang/lld/cmake/ninja via jniLibs.
+          SYSROOT="$NDK/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
+          mkdir -p "$OUT/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr"
+          cp -r "$SYSROOT/usr/include" \
+                "$OUT/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include"
+          mkdir -p "$OUT/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib"
+          cp -r "$SYSROOT/usr/lib/aarch64-linux-android" \
+                "$OUT/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android"
+
+          du -sh ndk-data
+          find "$OUT" -maxdepth 3
+
+      - name: Package tar.gz
+        run: |
+          tar czf kurdapk-ndk-data.tar.gz ndk-data
+          ls -la kurdapk-ndk-data.tar.gz
+
+      - name: Create release and upload
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ndk-r28c-v1
+          name: NDK r28c data (aarch64-only sysroot + cmake toolchain, no host binaries)
+          files: kurdapk-ndk-data.tar.gz
